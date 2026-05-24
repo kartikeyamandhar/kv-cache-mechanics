@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 results/data/*.csv
-results/plots/*.png
+# results/plots/*.png are committed so the README figures render on GitHub.
 .pytest_cache/
 hf_cache/
 .venv/
