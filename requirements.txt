@@ -1,5 +1,5 @@
 torch>=2.4.0
-transformers>=4.44.0
+transformers==4.46.3  # pinned: transformers 5.x needs a newer torch than the RunPod 2.4.1
 accelerate>=0.33.0
 numpy>=1.26.0
 pandas>=2.2.0

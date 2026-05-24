@@ -5,3 +5,6 @@ results/plots/*.png
 .pytest_cache/
 hf_cache/
 .venv/
+
+# Local instruction files — not published to GitHub
+CLAUDE.md
