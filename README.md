@@ -40,12 +40,26 @@ growing sequence, so per-step latency rises with length.
 | cache on  | 40.8 ms | 39.7 ms | **0.97× (flat)** |
 | cache off | 41.2 ms | 67.3 ms | **1.63× (rises)** |
 
+The same rise is visible *within a single decode run*. Holding the start fixed
+at 1024 tokens and generating 128 more, the cache-off per-step latency climbs
+monotonically from ~47 ms to ~72 ms as the re-fed sequence grows, while cache-on
+stays flat at ~40 ms. This is the direct measured proof, step by step:
+
+![Per-step latency by decode step](results/plots/fig2_per_step_by_position.png)
+
 Because the cache-off per-step cost grows with position, the **cumulative** cost
 of generating *N* tokens grows super-linearly (quadratically), while cache-on
 cumulative cost is linear:
 
-![Cumulative decode cost](results/plots/fig2_cumulative_decode.png)
+![Cumulative decode cost](results/plots/fig3_cumulative_decode.png)
 
+> **Note — Figure 3 is a modeled curve.** It is not a single recorded run: it
+> accumulates the measured per-step latency-vs-length grid (Figure 1) over decode
+> positions 1…1024, i.e. `cumulative(N) = Σ_{n≤N} per_step(n)`. The per-step
+> values are measured; the accumulation is the model. It is shown this way
+> because the quadratic only emerges over a large length range, which a single
+> 128-step run cannot span.
+>
 > **Honest caveat.** On a 0.5B model in eager mode this GPU has a ~40 ms fixed
 > per-forward floor, so the length-dependent compute term only dominates at
 > larger contexts. The cache-on/off contrast and the direction of scaling are
@@ -64,7 +78,7 @@ For Qwen2.5-0.5B (24 layers, 2 KV heads, head_dim 64, fp16) that is
 **12,288 bytes/token**. Measured allocator usage (cache held, model weights
 subtracted) matches the theoretical curve exactly and grows linearly:
 
-![KV cache memory](results/plots/fig3_kv_cache_memory.png)
+![KV cache memory](results/plots/fig4_kv_cache_memory.png)
 
 | sequence length | measured | theoretical |
 |---|---|---|
@@ -78,7 +92,7 @@ MHA caches one K/V per attention head; GQA shares each K/V across a group of
 query heads, caching only `num_key_value_heads` of them. The per-token cache
 therefore shrinks by `num_attention_heads / num_key_value_heads`.
 
-![KV cache per token: MHA vs GQA](results/plots/fig4_attention_variants.png)
+![KV cache per token: MHA vs GQA](results/plots/fig5_attention_variants.png)
 
 | model | attention | layers | attn heads | KV heads | bytes/token |
 |---|---|---|---|---|---|
@@ -94,11 +108,13 @@ ratio.
 The KV cache is a classic space-for-time trade. Without it, generation is
 **compute-bound and quadratic**: producing each new token recomputes attention
 over all previous tokens, so total work scales with the square of the sequence
-length. With it, generation becomes **linear in compute but linear in memory**:
-you pay a per-token memory cost (12 KB/token here) to avoid redoing all prior
-attention. GQA then attacks the memory side of that trade, cutting the per-token
-footprint by the head ratio with negligible quality loss — which is why nearly
-every modern open-weight model ships with it.
+length. With it, the cache **trades that quadratic compute for linear compute,
+at the cost of a new linear memory term**: you store the keys and values of
+every past token (12 KB/token here) so each step attends to them instead of
+recomputing them. Quadratic compute is gone; a memory cost that grows linearly
+with sequence length appears in its place. GQA then attacks that new memory
+term, cutting the per-token footprint by the head ratio with negligible quality
+loss — which is why nearly every modern open-weight model ships with it.
 
 ## Relevance to agent systems
 
@@ -144,7 +160,7 @@ src/
   memory.py              CUDA peak/current memory helpers
   benchmark.py           manual decode loop (cache on/off) + prefill timing
   attention_variants.py  per-model KV cache shape/byte computation
-  plotting.py            the four figures
+  plotting.py            the five figures
 experiments/             phase1_smoke … phase5_analysis
 results/data/            CSV outputs (gitignored)
 results/plots/           PNG figures (committed)

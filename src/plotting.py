@@ -40,17 +40,48 @@ def plot_per_step_latency(out_path=None):
     return out_path
 
 
-def plot_cumulative_decode(out_path=None):
-    """Figure 2: cumulative decode time vs tokens generated, both modes.
+def plot_per_step_by_position(out_path=None, start_length=1024):
+    """Figure 2: measured per-step latency vs decode step at a fixed start.
 
-    Generating the token at position n costs one decode step at sequence length
-    n. We take the measured per-step latency as a function of length (the
-    Figure-1 curve) and accumulate it over positions: cumulative(N) =
-    sum over n<=N of per_step(n). Cache-off per-step rises with n, so its
-    cumulative cost grows super-linearly (quadratic); cache-on per-step is flat,
-    so its cumulative cost is linear.
+    Direct within-run evidence. With the cache off, each successive step feeds a
+    longer sequence, so per-step latency climbs with the decode step; with the
+    cache on it stays flat. (True sequence length = ``start_length`` + step.)
+    L=1024 is used because at shorter contexts the fixed per-forward overhead
+    swamps the length-dependent term.
     """
-    out_path = out_path or (config.PLOTS_DIR / "fig2_cumulative_decode.png")
+    out_path = out_path or (config.PLOTS_DIR / "fig2_per_step_by_position.png")
+    df = pd.read_csv(config.LATENCY_CSV)
+    df = df[df["sequence_length"] == start_length]
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for mode, style in _MODE_STYLE.items():
+        sub = df[df["mode"] == mode].sort_values("step_index")
+        ax.plot(sub["step_index"], sub["step_latency_ms"],
+                color=style["color"], label=style["label"], linewidth=1.2)
+    ax.set_xlabel(f"Decode step  (sequence length = {start_length} + step)")
+    ax.set_ylabel("Per-step decode latency (ms)")
+    ax.set_title(f"Per-step decode latency vs decode step "
+                 f"(fixed {start_length}-token start)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path
+
+
+def plot_cumulative_decode(out_path=None):
+    """Figure 3: cumulative decode time vs tokens generated, both modes.
+
+    MODELED curve. Generating the token at position n costs one decode step at
+    sequence length n; we take the measured per-step latency as a function of
+    length (the Figure-1 grid) and accumulate it over positions:
+    cumulative(N) = sum over n<=N of per_step(n). This is interpolated from the
+    grid, not a single recorded run, but it shows the scaling cleanly over the
+    full length range: cache-off cost grows super-linearly (quadratic) because
+    per-step rises with n, while cache-on cost is linear.
+    """
+    out_path = out_path or (config.PLOTS_DIR / "fig3_cumulative_decode.png")
     df = pd.read_csv(config.LATENCY_CSV)
     agg = (df.groupby(["mode", "sequence_length"])["step_latency_ms"]
              .median().reset_index())
@@ -66,7 +97,7 @@ def plot_cumulative_decode(out_path=None):
     ax.set_xlabel("Tokens generated (decode position)")
     ax.set_ylabel("Cumulative decode time (s)")
     ax.set_title("Cumulative decode cost vs tokens generated\n"
-                 "(accumulated from measured per-step latency)")
+                 "(modeled: per-step latency from the Fig. 1 grid, accumulated)")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -76,8 +107,8 @@ def plot_cumulative_decode(out_path=None):
 
 
 def plot_memory(out_path=None):
-    """Figure 3: measured vs theoretical KV cache memory vs sequence length."""
-    out_path = out_path or (config.PLOTS_DIR / "fig3_kv_cache_memory.png")
+    """Figure 4: measured vs theoretical KV cache memory vs sequence length."""
+    out_path = out_path or (config.PLOTS_DIR / "fig4_kv_cache_memory.png")
     df = pd.read_csv(config.MEMORY_CSV).sort_values("sequence_length")
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -97,8 +128,8 @@ def plot_memory(out_path=None):
 
 
 def plot_attention_variants(out_path=None):
-    """Figure 4: KV cache bytes/token across attention variants."""
-    out_path = out_path or (config.PLOTS_DIR / "fig4_attention_variants.png")
+    """Figure 5: KV cache bytes/token across attention variants."""
+    out_path = out_path or (config.PLOTS_DIR / "fig5_attention_variants.png")
     df = pd.read_csv(config.ATTENTION_CSV)
 
     labels, values, colors = [], [], []
@@ -129,6 +160,7 @@ def plot_attention_variants(out_path=None):
 def generate_all():
     return [
         plot_per_step_latency(),
+        plot_per_step_by_position(),
         plot_cumulative_decode(),
         plot_memory(),
         plot_attention_variants(),
