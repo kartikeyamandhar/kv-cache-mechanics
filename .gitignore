@@ -1,10 +1,10 @@
 __pycache__/
 *.pyc
 results/data/*.csv
-# results/plots/*.png are committed so the README figures render on GitHub.
+# results/plots/*.svg are committed so the README figures render on GitHub.
 .pytest_cache/
 hf_cache/
 .venv/
 
-# Local instruction files — not published to GitHub
+# Local instruction files, not published to GitHub
 CLAUDE.md
